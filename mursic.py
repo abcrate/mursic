@@ -1,4 +1,5 @@
 import os
+import asyncio
 import discord
 from discord.ext import commands
 import yt_dlp
@@ -9,7 +10,7 @@ intents = discord.Intents.default()
 intents.message_content = True
 
 bot = commands.Bot(
-    command_prefix=["mursic ", "jarvis "], intents=intents, help_command=None
+    command_prefix="jambot ", intents=intents, help_command=None
 )
 
 queues = {}
@@ -156,3 +157,18 @@ async def help_command(ctx):
 
 
 bot.run(os.environ["BOT_TOKEN"])
+
+
+# Run Mursic
+async def garfbot_connect():
+    while True:
+        try:
+            await bot.start("BOT_TOKEN")
+        except Exception as e:
+            e = str(e)
+            print(f"Mursic couldn't connect! {e}")
+            await asyncio.sleep(60)
+
+
+if __name__ == "__main__":
+    asyncio.run(garfbot_connect())
