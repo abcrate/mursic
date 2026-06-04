@@ -3,28 +3,30 @@ import asyncio
 import discord
 from discord.ext import commands
 import yt_dlp
-import asyncio
 from collections import deque
 
 intents = discord.Intents.default()
 intents.message_content = True
+intents.voice_states = True
 
 bot = commands.Bot(
-    command_prefix="jambot ", intents=intents, help_command=None
+    command_prefix=["jambot ", "mursic ", "jarvis "],
+    intents=intents,
+    help_command=None
 )
 
 queues = {}
 
 YDL_OPTIONS = {
-    "format": "bestaudio/best",
+    "format": "bestaudio",
     "noplaylist": True,
     "quiet": True,
+    "nocheckcertificate": True,
 }
 
 FFMPEG_OPTIONS = {
     "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
     "options": "-vn",
-    "executable": "ffmpeg",
 }
 
 
@@ -37,9 +39,10 @@ def get_queue(guild_id):
 async def play_next(ctx):
     queue = get_queue(ctx.guild.id)
 
-    if len(queue) == 0:
+    if not queue:
         await ctx.send("✅ Queue finished!")
-        await ctx.voice_client.disconnect()
+        if ctx.voice_client:
+            await ctx.voice_client.disconnect()
         return
 
     url, title = queue.popleft()
@@ -47,13 +50,15 @@ async def play_next(ctx):
     try:
         with yt_dlp.YoutubeDL(YDL_OPTIONS) as ydl:
             info = ydl.extract_info(url, download=False)
-            audio_url = info["url"]
+            if 'entries' in info:
+                info = info['entries'][0]
+            audio_url = ydl.extract_info(info['url'], download=False)['url']
     except Exception as e:
         await ctx.send(f"❌ Skipping **{title}** — could not load: {e}")
         await play_next(ctx)
         return
 
-    source = discord.FFmpegPCMAudio(audio_url, **FFMPEG_OPTIONS)
+    source = discord.FFmpegPCMAudio(audio_url, **FFMPEG_OPTIONS, executable="ffmpeg")
 
     def after_playing(error):
         if error:
@@ -66,13 +71,13 @@ async def play_next(ctx):
 
 @bot.event
 async def on_ready():
-    print(f"Logged in as {bot.user}!")
+    print(f"✅ Logged in as {bot.user}!")
 
 
 @bot.command(name="play")
 async def play(ctx, url: str):
     if not ctx.author.voice:
-        await ctx.send("You need to be in a voice channel first!")
+        await ctx.send("❌ You need to be in a voice channel first!")
         return
 
     voice_channel = ctx.author.voice.channel
@@ -87,6 +92,8 @@ async def play(ctx, url: str):
     try:
         with yt_dlp.YoutubeDL(YDL_OPTIONS) as ydl:
             info = ydl.extract_info(url, download=False)
+            if 'entries' in info:
+                info = info['entries'][0]
             title = info.get("title", "Unknown")
     except Exception as e:
         await ctx.send(f"❌ Could not fetch video info: {e}")
@@ -94,7 +101,7 @@ async def play(ctx, url: str):
 
     queue = get_queue(ctx.guild.id)
 
-    if ctx.voice_client.is_playing():
+    if ctx.voice_client and ctx.voice_client.is_playing():
         queue.append((url, title))
         await ctx.send(f"➕ Added to queue: **{title}** (position {len(queue)})")
     else:
@@ -108,14 +115,14 @@ async def skip(ctx):
         ctx.voice_client.stop()
         await ctx.send("⏭️ Skipped!")
     else:
-        await ctx.send("Nothing is playing!")
+        await ctx.send("❌ Nothing is playing!")
 
 
 @bot.command(name="queue")
 async def show_queue(ctx):
     queue = get_queue(ctx.guild.id)
     if not queue:
-        await ctx.send("The queue is empty!")
+        await ctx.send("❌ The queue is empty!")
         return
 
     msg = "**📋 Queue:**\n"
@@ -138,7 +145,7 @@ async def stop(ctx):
         await ctx.voice_client.disconnect()
         await ctx.send("⏹️ Stopped and disconnected!")
     else:
-        await ctx.send("I'm not in a voice channel!")
+        await ctx.send("❌ I'm not in a voice channel!")
 
 
 @bot.command(name="help")
@@ -152,23 +159,20 @@ async def help_command(ctx):
 `mursic clear` — clear the queue
 `mursic stop` — stop playing and disconnect
 
-💡 You can also use `jarvis` instead of `mursic` for all commands!
+You can also use `jambot` or `jarvis` instead of `mursic` for all commands!
+
+Requires an active voice channel.
     """)
 
 
-bot.run(os.environ["BOT_TOKEN"])
-
-
-# Run Mursic
-async def garfbot_connect():
+async def mursic_connect():
     while True:
         try:
-            await bot.start("BOT_TOKEN")
+            await bot.start(os.environ["BOT_TOKEN"])
         except Exception as e:
-            e = str(e)
-            print(f"Mursic couldn't connect! {e}")
+            print(f"❌ Mursic couldn't connect! {e}")
             await asyncio.sleep(60)
 
 
 if __name__ == "__main__":
-    asyncio.run(garfbot_connect())
+    asyncio.run(mursic_connect())
